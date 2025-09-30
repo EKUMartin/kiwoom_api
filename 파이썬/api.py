@@ -1,6 +1,11 @@
 import requests
 import json
-# 접근토큰 발급
+import subprocess
+import schedule
+import time
+from datetime import datetime, timedelta
+
+#---------------------접근토큰 발급---------------------------#
 def fn_au10001(data):
 	# 1. 요청할 API URL
 	host = 'https://mockapi.kiwoom.com' # 모의투자
@@ -21,11 +26,14 @@ def fn_au10001(data):
 	print('Header:', json.dumps({key: response.headers.get(key) for key in ['next-key', 'cont-yn', 'api-id']}, indent=4, ensure_ascii=False))
 	print('Body:', json.dumps(response.json(), indent=4, ensure_ascii=False))  # JSON 응답을 파싱하여 출력
 	return response
-
+#---------------------접근토큰 추출--------------------------#
 def get_token(response):
 	data=response.json()
 	token=data.get("token")
 	return token
+
+
+#---------------------외국인 매수 매도 현황 api 호출---------------------------#
 def fn_ka10131(token, data, cont_yn='N', next_key=''):
 	# 1. 요청할 API URL
 	host = 'https://mockapi.kiwoom.com' # 모의투자
@@ -50,9 +58,12 @@ def fn_ka10131(token, data, cont_yn='N', next_key=''):
 	print('Header:', json.dumps({key: response.headers.get(key) for key in ['next-key', 'cont-yn', 'api-id']}, indent=4, ensure_ascii=False))
 	print('Body:', json.dumps(response.json(), indent=4, ensure_ascii=False))  # JSON 응답을 파싱하여 출력
 	return response
+
+#---------------------api 결과 파싱---------------------------#
 def parse_data(response):
 	data=response.json()
 	return data
+#---------------------외국인 매수 매도 현황 api 호출+ 파싱 결과---------------------------#
 def get_ft(dt,strt_dt,end_dt,mrkt_tp,netslmt_tp,stk_inds_tp,amt_qty_tp,stex_tp,token):
 		# 기관외국인연속매매현황요청
 	MY_ACCESS_TOKEN = token
@@ -74,18 +85,23 @@ def get_ft(dt,strt_dt,end_dt,mrkt_tp,netslmt_tp,stk_inds_tp,amt_qty_tp,stex_tp,t
 	# next-key, cont-yn 값이 있을 경우
 	# fn_ka10131(token=MY_ACCESS_TOKEN, data=params, cont_yn='Y', next_key='nextkey..')
 	return json_ft
-# 실행 구간
-if __name__ == '__main__':
-	# 1. 요청 데이터
+
+#---------------------최종적으로 수집할 데이터 api 다 여기에다가 넣어야 함->DB넣는 것까지 다 구현 ---------------------------#
+def run_schedule():
+
 	params = {
 		'grant_type': 'client_credentials',  # grant_type
 		'appkey': 'EJUvIP-gLXzixSvHm6noCiAs7Vg-1w0PfgNL5cj2f_Q',  # 앱키
 		'secretkey': 'Y_Z84ClM-8cdjdqzgGpvAcBDAZhw_O20rXEpAMYxRq0',  # 시크릿키
 	}
 
-	# 2. API 실행 token:9KzDyfVh-755HGpChf6J3DSf6iSSDk5stauyLt_pe97tJ2kOWqeDhsZ54_mnefI8echOWBoD-S19rvG-NqnJ-A
+	# 2. API 실행
 	response_token=fn_au10001(data=params)
 	token=get_token(response_token)
 	ft=get_ft('1','','' ,'001','2','0','0','1',token)
-	print(ft)
 
+
+#---------------------실행---------------------------#
+if __name__ == '__main__':
+	while True:
+		schedule.every(5).minutes.do(lambda: (lambda now=datetime.now(): run_schedule() if (now.weekday()<5 and (9,0,0) <= (now.hour,now.minute,now.second) <= (15,30,0)) else None)())
