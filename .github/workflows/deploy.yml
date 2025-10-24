@@ -1,0 +1,71 @@
+name: Deploy to cloudtype
+
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    # KST 07:50, 07:55 → UTC 22:50, 22:55
+    - cron: "50 22 * * *"
+    - cron: "55 22 * * *"
+    # KST 08:00~08:55 매 5분 → UTC 23:00~23:55
+    - cron: "*/5 23 * * *"
+    # KST 09:00 → UTC 00:00
+    - cron: "0 0 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: cloudtype-deploy
+      cancel-in-progress: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 스케줄로 돌 때만: Postgres TCP 포트가 열려 있나 확인
+      - name: Health check (TCP) — schedule only
+        id: ping
+        if: ${{ github.event_name == 'schedule' }}
+        continue-on-error: true
+        env:
+          PGHOST: ${{ secrets.PGHOST }}
+          PGPORT: ${{ secrets.PGPORT }}
+        run: |
+          if [ -z "$PGHOST" ] || [ -z "$PGPORT" ]; then
+            echo "PGHOST / PGPORT secrets required"; exit 1
+          fi
+          echo "Checking TCP ${PGHOST}:${PGPORT} ..."
+          timeout 5 bash -c "cat < /dev/null > /dev/tcp/${PGHOST}/${PGPORT}"
+
+      - name: Connect deploy key
+        if: |
+          github.event_name == 'push' || steps.ping.outcome == 'failure'
+        uses: cloudtype-github-actions/connect@v1
+        with:
+          token: ${{ secrets.CLOUDTYPE_TOKEN }}
+          ghtoken: ${{ secrets.GHP_TOKEN }}
+
+      - name: Deploy
+        if: |
+          github.event_name == 'push' || steps.ping.outcome == 'failure'
+        uses: cloudtype-github-actions/deploy@v1
+        with:
+          token: ${{ secrets.CLOUDTYPE_TOKEN }}
+          project: ekumartin/kiwoom_api
+          stage: main
+          yaml: |
+            name: kiwoom
+            app: postgresql@16
+            options:
+              rootusername: root
+              rootpassword: ${{ secrets.DB_ROOT_PASSWORD }}   # ← 평문 비번은 Secrets로 교체!
+            context:
+              preset: postgresql
+              git:
+                url: git@github.com:${{ github.repository }}.git
+                ref: main   # 스케줄 실행에서도 안정적으로 main 고정
+
+      - name: Already up — skipped
+        if: ${{ github.event_name == 'schedule' && steps.ping.outcome == 'success' }}
+        run: echo "Postgres is UP. Skipping deploy."
