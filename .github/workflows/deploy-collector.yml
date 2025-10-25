@@ -1,0 +1,67 @@
+name: Deploy collector (web) to Cloudtype
+
+on:
+  push:
+    branches: [ master ]     # 기본 브랜치가 main이면 main으로 바꾸세요
+  schedule:
+    # KST 07:50, 07:55 → UTC 22:50, 22:55
+    - cron: "50 22 * * *"
+    - cron: "55 22 * * *"
+    # KST 08:00~08:55 → UTC 23:00~23:55 (5분 간격)
+    - cron: "*/5 23 * * *"
+    # KST 09:00 → UTC 00:00
+    - cron: "0 0 * * *"
+    # (선택) 장중 보강: 09:15~15:30 KST → 00:15~06:30 UTC, 15분 간격
+    - cron: "15-59/15 0-6 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  deploy-web:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: cloudtype-deploy-web
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+
+      # 스케줄일 때만, 앱 헬스체크: 살아있으면 스킵
+      - name: Health check (HTTP) — schedule only
+        id: ping
+        if: ${{ github.event_name == 'schedule' }}
+        continue-on-error: true
+        run: |
+          curl -fsS --max-time 8 https://<여기_클라우드타입_앱도메인>/health
+
+      - name: Connect deploy key
+        if: github.event_name == 'push' || steps.ping.outcome == 'failure'
+        uses: cloudtype-github-actions/connect@v1
+        with:
+          token: ${{ secrets.CLOUDTYPE_TOKEN }}
+          ghtoken: ${{ secrets.GHP_TOKEN }}
+
+      - name: Deploy collector (web)
+        if: github.event_name == 'push' || steps.ping.outcome == 'failure'
+        uses: cloudtype-github-actions/deploy@v1
+        with:
+          token: ${{ secrets.CLOUDTYPE_TOKEN }}
+          project: ekumartin/kiwoom_api
+          stage: main
+          yaml: |
+            name: collector
+            app: web
+            options:
+              ports: [ { port: 8080, targetPort: 8080 } ]
+              healthCheck: { httpGet: { path: /health, port: 8080 } }
+            context:
+              docker:
+                workdir: 파이썬/api        # ← Dockerfile 있는 폴더
+              git:
+                url: git@github.com:${{ github.repository }}.git
+                ref: master               # 기본 브랜치가 main이면 main
+            env:
+              - { name: PGHOST, value: <클타 PG 호스트> }
+              - { name: PGPORT, value: "<실제 포트 예:31312>" }
+              - { name: PGUSER, value: root }
+              - { name: PGDATABASE, value: postgres }
+              - { name: API_APPKEY, value: ${API_APPKEY} }
+              - { name: API_SECRETKEY, value: ${API_SECRETKEY} }
