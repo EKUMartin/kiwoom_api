@@ -30,7 +30,7 @@ jobs:
         if: ${{ github.event_name == 'schedule' }}
         continue-on-error: true
         run: |
-          curl -fsS --max-time 8 https://<여기_클라우드타입_앱도메인>/health
+          curl -fsS --max-time 8 https://port-0-kiwoom-api-mg1xfko36454794c.sel3.cloudtype.app/health
 
       - name: Connect deploy key
         if: github.event_name == 'push' || steps.ping.outcome == 'failure'
@@ -59,9 +59,9 @@ jobs:
                 url: git@github.com:${{ github.repository }}.git
                 ref: master               # 기본 브랜치가 main이면 main
             env:
-              - { name: PGHOST, value: <클타 PG 호스트> }
-              - { name: PGPORT, value: "<실제 포트 예:31312>" }
-              - { name: PGUSER, value: root }
-              - { name: PGDATABASE, value: postgres }
+              - { name: PGHOST, value: "svc.sel3.cloudtype.app"}
+              - { name: PGPORT, value: "31312" }
+              - { name: PGUSER, value: "root" }
+              - { name: PGDATABASE, value: "postgres" }
               - { name: API_APPKEY, value: ${API_APPKEY} }
               - { name: API_SECRETKEY, value: ${API_SECRETKEY} }
