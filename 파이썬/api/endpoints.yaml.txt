@@ -1,0 +1,52 @@
+# 인증/토큰 정보 (api_call.py가 ENV에서 앱키/시크릿을 읽습니다)
+auth:
+  host: https://mockapi.kiwoom.com        # 실전이면 https://api.kiwoom.com
+  token_path: /oauth2/token
+  token_field: access_token               # 응답에서 토큰 키 이름 (다를 경우 수정)
+  expires_in_field: expires_in
+  appkey_env: API_APPKEY                  # Cloudtype Secrets로 등록하는 이름
+  secret_env: API_SECRETKEY               # Cloudtype Secrets로 등록하는 이름
+
+# 수집 잡(여러 개 가능)
+jobs:
+  - id: frgn_flow_kospi
+    method: POST
+    path: /api/dostk/frgnistt
+    headers:
+      api-id: ka10131
+    body:
+      dt: "1"            # 최근일
+      strt_dt: ""        # dt=0이면 기간 조회에 사용
+      end_dt: ""
+      mrkt_tp: "001"     # 코스피
+      netslmt_tp: "2"    # 순매수
+      stk_inds_tp: "0"   # 종목
+      amt_qty_tp: "0"    # 금액
+      stex_tp: "1"       # KRX
+    parse:
+      table: frgn_flow   # 테이블명(없으면 id 사용)
+      mapping:           # 응답 JSON에서 추출할 키 매핑
+        amount: $.amount
+        mrkt_tp: $.mrkt_tp
+    interval_sec: 1      # 장중 호출 주기(초)
+
+  - id: frgn_flow_kosdaq
+    method: POST
+    path: /api/dostk/frgnistt
+    headers:
+      api-id: ka10131
+    body:
+      dt: "1"
+      strt_dt: ""
+      end_dt: ""
+      mrkt_tp: "101"     # 코스닥
+      netslmt_tp: "2"
+      stk_inds_tp: "0"
+      amt_qty_tp: "0"
+      stex_tp: "1"
+    parse:
+      table: frgn_flow
+      mapping:
+        amount: $.amount
+        mrkt_tp: $.mrkt_tp
+    interval_sec: 1
