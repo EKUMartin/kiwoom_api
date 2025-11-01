@@ -217,9 +217,7 @@ def run_schedule(token,conn):
 
 #---------------------실행---------------------------#
 token=toss_token()#토큰 최초 1회 발급
-ft=get_ft('1','','' ,'001','2','0','0','1',token)
 conn=conn_db()
-insert_db(ft,"fn_ka10131",conn)
 schedule.every(1).minutes.do(lambda: (lambda now=datetime.now(): run_schedule(token,conn) if (now.weekday()<5 and (9,0,0) <= (now.hour,now.minute,now.second) <= (15,30,0)) else None)())
 while True:
     schedule.run_pending()
