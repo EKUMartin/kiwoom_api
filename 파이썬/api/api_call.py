@@ -14,9 +14,7 @@ def fn_au10001(data):
 	url =  host + endpoint
 
 	# 2. header 데이터
-	headers = {
-		'Content-Type': 'application/json;charset=UTF-8', # 컨텐츠타입
-	}
+	headers = {'Content-Type': 'application/json;charset=UTF-8'} # 컨텐츠타입
 
 	# 3. http POST 요청
 	response = requests.post(url, headers=headers, json=data)
@@ -35,25 +33,15 @@ def get_token(response):
 def toss_token():
     appkey = os.getenv("API_APPKEY")
     secret = os.getenv("API_SECRETKEY")
-	params = {
-		'grant_type': 'client_credentials',  # grant_type
-		'appkey': appkey,  # 앱키
-		'secretkey': secret,  # 시크릿키
-	}
+    params={'grant_type': 'client_credentials','appkey': appkey,'secretkey': secret}  # grant_type # 앱키# 시크릿키
 
-	# 2. API 실행
-	response_token=fn_au10001(data=params)
-	token=get_token(response_token)
-	return token
+    # 2. API 실행
+    response_token=fn_au10001(data=params)
+    token=get_token(response_token)
+    return token
 #---------------------DB 입력--------------------------#
 def conn_db():
-    return psycopg2.connect(
-        host="svc.sel3.cloudtype.app",
-        port=31312,
-        dbname="postgres",
-        user="root",
-        password="kiwoomapi2025",
-    )
+    return psycopg2.connect(host="svc.sel3.cloudtype.app",port=31312,dbname="postgres",user="root",password="kiwoomapi2025",)
 def pg_type_from_py(py_t):
     if py_t is bool:
         return "BOOLEAN"
