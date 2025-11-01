@@ -24,7 +24,7 @@ jobs:
         uses: cloudtype-github-actions/deploy@v1
         with:
           token: ${{ secrets.CLOUDTYPE_TOKEN }}
-          project: ekumartin/kiwoom_api
+          project: ekumartin/kiwoom-api
           stage: main
           yaml: |
             name: kiwoom-api
