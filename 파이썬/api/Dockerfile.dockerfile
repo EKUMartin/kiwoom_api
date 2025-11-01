@@ -1,15 +1,14 @@
 FROM python:3.11-slim
 
-# 시스템 타임존 맞추고(선택), 필수 유틸 설치(선택)
-ENV TZ=Asia/Seoul
+ENV PYTHONUNBUFFERED=1 TZ=Asia/Seoul
 WORKDIR /app
 
-# 파이썬 패키지
-COPY requirements.txt .
+# 의존성 설치
+COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 앱
-COPY app_call.py .
+# 앱 복사
+COPY api_call.py ./api_call.py
 
-# 컨테이너 시작 시 실행
-CMD ["python","-u","api_call.py"]
+# 컨테이너 시작 커맨드
+CMD ["python", "-u", "api_call.py"]
