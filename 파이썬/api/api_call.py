@@ -33,10 +33,12 @@ def get_token(response):
 	return token
 #---------------------토큰 최초 발급 ---------------------------#
 def toss_token():
+    appkey = os.getenv("API_APPKEY")
+    secret = os.getenv("API_SECRETKEY")
 	params = {
 		'grant_type': 'client_credentials',  # grant_type
-		'appkey': 'EJUvIP-gLXzixSvHm6noCiAs7Vg-1w0PfgNL5cj2f_Q',  # 앱키
-		'secretkey': 'Y_Z84ClM-8cdjdqzgGpvAcBDAZhw_O20rXEpAMYxRq0',  # 시크릿키
+		'appkey': appkey,  # 앱키
+		'secretkey': secret,  # 시크릿키
 	}
 
 	# 2. API 실행
