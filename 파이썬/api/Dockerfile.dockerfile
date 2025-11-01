@@ -12,4 +12,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py .
 
 # 컨테이너 시작 시 실행
-CMD ["python", "app.py"]
+CMD ["python","-u","api_call.py"]
