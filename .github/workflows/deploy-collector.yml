@@ -1,22 +1,45 @@
-# 바꿀 부분만 예시
-with:
-  token: ${{ secrets.CLOUDTYPE_TOKEN }}
-  project: ekumartin/kiwoom_api
-  stage: main
-  yaml: |
-    name: collector
-    app: worker          # ← web 대신 worker
-    context:
-      docker:
-        workdir: 파이썬/api
-      git:
-        url: git@github.com:${{ github.repository }}.git
-        ref: master
-    # ports/healthCheck 제거
-    env:
-      - { name: PGHOST, value: "svc.sel3.cloudtype.app"}
-      - { name: PGPORT, value: "31312" }
-      - { name: PGUSER, value: "root" }
-      - { name: PGDATABASE, value: "postgres" }
-      - { name: API_APPKEY, value: ${API_APPKEY} }
-      - { name: API_SECRETKEY, value: ${API_SECRETKEY} }
+name: Deploy kiwoom-api (worker) to Cloudtype
+
+on:
+  push:
+    branches: [ master ]      # ← 네 저장소 기본 브랜치에 맞춰! (main이면 main으로)
+  workflow_dispatch: {}
+
+jobs:
+  deploy-worker:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: cloudtype-deploy-worker
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Connect deploy key
+        uses: cloudtype-github-actions/connect@v1
+        with:
+          token: ${{ secrets.CLOUDTYPE_TOKEN }}
+          ghtoken: ${{ secrets.GHP_TOKEN }}
+
+      - name: Deploy kiwoom-api (worker)
+        uses: cloudtype-github-actions/deploy@v1
+        with:
+          token: ${{ secrets.CLOUDTYPE_TOKEN }}
+          project: ekumartin/kiwoom_api
+          stage: main
+          yaml: |
+            name: kiwoom-api
+            app: worker                          # ← web 말고 worker
+            context:
+              docker:
+                workdir: 파이썬/api               # ← Dockerfile 있는 폴더
+              git:
+                url: git@github.com:${{ github.repository }}.git
+                ref: master                       # ← 브랜치 일치시키기 (main이면 main)
+            # web 전용 설정 제거 (ports/healthCheck 모두 삭제)
+            env:
+              - { name: PGHOST, value: "svc.sel3.cloudtype.app" }
+              - { name: PGPORT, value: "31312" }
+              - { name: PGUSER, value: "root" }
+              - { name: PGDATABASE, value: "postgres" }
+              - { name: API_APPKEY, value: ${API_APPKEY} }
+              - { name: API_SECRETKEY, value: ${API_SECRETKEY} }
