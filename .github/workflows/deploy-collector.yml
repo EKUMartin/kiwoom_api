@@ -2,7 +2,14 @@ name: Deploy kiwoom-api (worker) to Cloudtype
 
 on:
   push:
-    branches: [ master ]      # ← 네 저장소 기본 브랜치에 맞춰! (main이면 main으로)
+    branches: [ master ]  # 기본 브랜치에 맞춰 수정 (main이면 main)
+  schedule:
+    # KST 07:00~07:55 매 5분 → UTC 22:00~22:55
+    - cron: "*/5 22 * * *"
+    # KST 08:00~08:55 매 5분 → UTC 23:00~23:55
+    - cron: "*/5 23 * * *"
+    # KST 09:00 정각 → UTC 00:00
+    - cron: "0 0 * * *"
   workflow_dispatch: {}
 
 jobs:
@@ -11,16 +18,48 @@ jobs:
     concurrency:
       group: cloudtype-deploy-worker
       cancel-in-progress: true
+
     steps:
       - uses: actions/checkout@v4
 
+      # (선택) 최근 하트비트가 있으면 스케줄 배포 스킵
+      - name: Heartbeat check — schedule only
+        id: hb
+        if: ${{ github.event_name == 'schedule' }}
+        env:
+          PGHOST:     ${{ secrets.PGHOST }}
+          PGPORT:     ${{ secrets.PGPORT }}
+          PGUSER:     ${{ secrets.PGUSER }}
+          PGPASSWORD: ${{ secrets.PGPASSWORD }}
+          PGDATABASE: ${{ secrets.PGDATABASE }}
+          FRESH_MIN: "6"   # 최근 6분 이내 하트비트가 있으면 살아있다고 판단
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -y && sudo apt-get install -y postgresql-client
+          fi
+          echo "Checking worker heartbeat within last ${FRESH_MIN} minutes..."
+          SQL=$'SELECT NOW() - MAX(ts) <= make_interval(mins => '"${FRESH_MIN}"') AS is_fresh FROM worker_heartbeat;'
+          set +e
+          RES=$(psql "host=$PGHOST port=$PGPORT user=$PGUSER dbname=$PGDATABASE" -At -c "$SQL" 2>/dev/null)
+          EC=$?
+          set -e
+          echo "psql exit=$EC, result=${RES}"
+          if [ $EC -ne 0 ] || [ "$RES" != "t" ]; then
+            echo "heartbeat=failure" >> $GITHUB_OUTPUT
+          else
+            echo "heartbeat=success" >> $GITHUB_OUTPUT
+          fi
+
+      # 푸시이거나(코드 변경), 하트비트 실패(멈췄을 가능성)일 때만 배포 연결/실행
       - name: Connect deploy key
+        if: github.event_name == 'push' || steps.hb.outputs.heartbeat == 'failure'
         uses: cloudtype-github-actions/connect@v1
         with:
           token: ${{ secrets.CLOUDTYPE_TOKEN }}
           ghtoken: ${{ secrets.GHP_TOKEN }}
 
       - name: Deploy kiwoom-api (worker)
+        if: github.event_name == 'push' || steps.hb.outputs.heartbeat == 'failure'
         uses: cloudtype-github-actions/deploy@v1
         with:
           token: ${{ secrets.CLOUDTYPE_TOKEN }}
@@ -28,18 +67,22 @@ jobs:
           stage: main
           yaml: |
             name: kiwoom-api
-            app: worker                          # ← web 말고 worker
+            app: worker
             context:
               docker:
-                workdir: 파이썬/api               # ← Dockerfile 있는 폴더
+                workdir: 파이썬/api          # Dockerfile 위치
               git:
                 url: git@github.com:${{ github.repository }}.git
-                ref: master                       # ← 브랜치 일치시키기 (main이면 main)
-            # web 전용 설정 제거 (ports/healthCheck 모두 삭제)
+                ref: master                 # 기본 브랜치에 맞춰
             env:
-              - { name: PGHOST, value: "svc.sel3.cloudtype.app" }
-              - { name: PGPORT, value: "31312" }
-              - { name: PGUSER, value: "root" }
-              - { name: PGDATABASE, value: "postgres" }
-              - { name: API_APPKEY, value: ${API_APPKEY} }
-              - { name: API_SECRETKEY, value: ${API_SECRETKEY} }
+              - { name: PGHOST,       value: "${{ secrets.PGHOST }}" }
+              - { name: PGPORT,       value: "${{ secrets.PGPORT }}" }
+              - { name: PGUSER,       value: "${{ secrets.PGUSER }}" }
+              - { name: PGPASSWORD,   value: "${{ secrets.PGPASSWORD }}" }
+              - { name: PGDATABASE,   value: "${{ secrets.PGDATABASE }}" }
+              - { name: API_APPKEY,   value: "${{ secrets.API_APPKEY }}" }
+              - { name: API_SECRETKEY, value: "${{ secrets.API_SECRETKEY }}" }
+
+      - name: Already running — skipped
+        if: ${{ github.event_name == 'schedule' && steps.hb.outputs.heartbeat == 'success' }}
+        run: echo "Worker heartbeat is fresh. Skipping deploy."
