@@ -1,11 +1,13 @@
-name: Deploy kiwoom-api (worker) to Cloudtype
+# .github/workflows/deploy-master.yml
+name: Deploy to cloudtype
 
 on:
   push:
-    branches: [ master ]  # 기본 브랜치에 맞춰 수정 (main이면 main)
+    branches: [ master ]
   schedule:
-    # KST 07:00~07:55 매 5분 → UTC 22:00~22:55
-    - cron: "*/5 22 * * *"
+    # KST 07:50, 07:55 → UTC 22:50, 22:55
+    - cron: "50 22 * * *"
+    - cron: "55 22 * * *"
     # KST 08:00~08:55 매 5분 → UTC 23:00~23:55
     - cron: "*/5 23 * * *"
     # KST 09:00 정각 → UTC 00:00
@@ -13,16 +15,17 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  deploy-worker:
+  deploy:
     runs-on: ubuntu-latest
     concurrency:
       group: cloudtype-deploy-worker
       cancel-in-progress: true
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      # (선택) 최근 하트비트가 있으면 스케줄 배포 스킵
+      # 스케줄 트리거에서만: 최근 하트비트가 신선하면 배포 스킵
       - name: Heartbeat check — schedule only
         id: hb
         if: ${{ github.event_name == 'schedule' }}
@@ -32,7 +35,7 @@ jobs:
           PGUSER:     ${{ secrets.PGUSER }}
           PGPASSWORD: ${{ secrets.PGPASSWORD }}
           PGDATABASE: ${{ secrets.PGDATABASE }}
-          FRESH_MIN: "6"   # 최근 6분 이내 하트비트가 있으면 살아있다고 판단
+          FRESH_MIN: "6"   # 최근 6분 내 하트비트면 살아있다고 판단
         run: |
           if ! command -v psql >/dev/null 2>&1; then
             sudo apt-get update -y && sudo apt-get install -y postgresql-client
@@ -50,38 +53,58 @@ jobs:
             echo "heartbeat=success" >> $GITHUB_OUTPUT
           fi
 
-      # 푸시이거나(코드 변경), 하트비트 실패(멈췄을 가능성)일 때만 배포 연결/실행
+      # 푸시(코드 변경)거나 하트비트 실패일 때만 Cloudtype 연결/배포
       - name: Connect deploy key
         if: github.event_name == 'push' || steps.hb.outputs.heartbeat == 'failure'
         uses: cloudtype-github-actions/connect@v1
         with:
           token: ${{ secrets.CLOUDTYPE_TOKEN }}
           ghtoken: ${{ secrets.GHP_TOKEN }}
+          # scope: ekumartin   # 프로젝트가 기본 스페이스가 아니면 주석 해제
 
-      - name: Deploy kiwoom-api (worker)
+      - name: Deploy to Cloudtype
         if: github.event_name == 'push' || steps.hb.outputs.heartbeat == 'failure'
         uses: cloudtype-github-actions/deploy@v1
         with:
           token: ${{ secrets.CLOUDTYPE_TOKEN }}
-          project: ekumartin/kiwoom-api
+          project: ekumartin/kiwoom_api     # 콘솔 CLI 탭에서 복사한 값
           stage: main
           yaml: |
             name: kiwoom-api
-            app: worker
+            app: dockerfile
+            options:
+              dockerfile: Dockerfile.dockerfile
+              env:
+                - name: PGHOST
+                  value: svc.sel3.cloudtype.app
+                - name: PGPORT
+                  value: "31312"
+                - name: PGUSER
+                  value: root
+                - name: PGDATABASE
+                  value: postgres
+                - name: PGPASSWORD
+                  secret: PGPASSWORD
+                - name: API_APPKEY
+                  secret: API_APPKEY
+                - name: API_SECRETKEY
+                  secret: API_SECRETKEY
+                - name: PYTHONUTF8
+                  value: "1"
+                - name: PYTHONIOENCODING
+                  value: UTF-8
+              args: []
+              commands: >
+                bash -lc 'python - <<PY
+                from pathlib import Path
+                Path("/tmp/a.py").write_text(open("/app/api_call.py","rb").read().decode("utf-8","ignore"), encoding="utf-8")
+                PY
+                && pip -q install -t /tmp/p pydantic
+                && PYTHONPATH=/tmp/p python -u /tmp/a.py'
             context:
-              docker:
-                workdir: 파이썬/api          # Dockerfile 위치
               git:
                 url: git@github.com:${{ github.repository }}.git
-                ref: master                 # 기본 브랜치에 맞춰
-            env:
-              - { name: PGHOST,       value: "${{ secrets.PGHOST }}" }
-              - { name: PGPORT,       value: "${{ secrets.PGPORT }}" }
-              - { name: PGUSER,       value: "${{ secrets.PGUSER }}" }
-              - { name: PGPASSWORD,   value: "${{ secrets.PGPASSWORD }}" }
-              - { name: PGDATABASE,   value: "${{ secrets.PGDATABASE }}" }
-              - { name: API_APPKEY,   value: "${{ secrets.API_APPKEY }}" }
-              - { name: API_SECRETKEY, value: "${{ secrets.API_SECRETKEY }}" }
+                ref: ${{ github.ref }}
 
       - name: Already running — skipped
         if: ${{ github.event_name == 'schedule' && steps.hb.outputs.heartbeat == 'success' }}
