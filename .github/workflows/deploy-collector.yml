@@ -5,12 +5,9 @@ on:
   push:
     branches: [ master ]
   schedule:
-    # KST 07:50, 07:55 → UTC 22:50, 22:55
     - cron: "50 22 * * *"
     - cron: "55 22 * * *"
-    # KST 08:00~08:55 매 5분 → UTC 23:00~23:55
     - cron: "*/5 23 * * *"
-    # KST 09:00 정각 → UTC 00:00
     - cron: "0 0 * * *"
   workflow_dispatch: {}
 
@@ -25,7 +22,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 스케줄 트리거에서만: 최근 하트비트가 신선하면 배포 스킵
       - name: Heartbeat check — schedule only
         id: hb
         if: ${{ github.event_name == 'schedule' }}
@@ -35,12 +31,11 @@ jobs:
           PGUSER:     ${{ secrets.PGUSER }}
           PGPASSWORD: ${{ secrets.PGPASSWORD }}
           PGDATABASE: ${{ secrets.PGDATABASE }}
-          FRESH_MIN: "6"   # 최근 6분 내 하트비트면 살아있다고 판단
+          FRESH_MIN: "6"
         run: |
           if ! command -v psql >/dev/null 2>&1; then
             sudo apt-get update -y && sudo apt-get install -y postgresql-client
           fi
-          echo "Checking worker heartbeat within last ${FRESH_MIN} minutes..."
           SQL=$'SELECT NOW() - MAX(ts) <= make_interval(mins => '"${FRESH_MIN}"') AS is_fresh FROM worker_heartbeat;'
           set +e
           RES=$(psql "host=$PGHOST port=$PGPORT user=$PGUSER dbname=$PGDATABASE" -At -c "$SQL" 2>/dev/null)
@@ -53,27 +48,25 @@ jobs:
             echo "heartbeat=success" >> $GITHUB_OUTPUT
           fi
 
-      # 푸시(코드 변경)거나 하트비트 실패일 때만 Cloudtype 연결/배포
       - name: Connect deploy key
         if: github.event_name == 'push' || steps.hb.outputs.heartbeat == 'failure'
         uses: cloudtype-github-actions/connect@v1
         with:
           token: ${{ secrets.CLOUDTYPE_TOKEN }}
           ghtoken: ${{ secrets.GHP_TOKEN }}
-          # scope: ekumartin   # 프로젝트가 기본 스페이스가 아니면 주석 해제
 
       - name: Deploy to Cloudtype
         if: github.event_name == 'push' || steps.hb.outputs.heartbeat == 'failure'
         uses: cloudtype-github-actions/deploy@v1
         with:
           token: ${{ secrets.CLOUDTYPE_TOKEN }}
-          project: ekumartin/kiwoom_api     # 콘솔 CLI 탭에서 복사한 값
+          project: ekumartin/kiwoom_api
           stage: main
           yaml: |
             name: kiwoom-api
             app: dockerfile
             options:
-              dockerfile: Dockerfile.dockerfile
+              dockerfile: 파이썬/api/Dockerfile.dockerfile
               env:
                 - name: PGHOST
                   value: svc.sel3.cloudtype.app
@@ -93,18 +86,20 @@ jobs:
                   value: "1"
                 - name: PYTHONIOENCODING
                   value: UTF-8
+                - name: LANG
+                  value: C.UTF-8
+                - name: LC_ALL
+                  value: C.UTF-8
               args: []
               commands: >
-                bash -lc 'python - <<PY
-                from pathlib import Path
-                Path("/tmp/a.py").write_text(open("/app/api_call.py","rb").read().decode("utf-8","ignore"), encoding="utf-8")
-                PY
-                && pip -q install -t /tmp/p pydantic
-                && PYTHONPATH=/tmp/p python -u /tmp/a.py'
+                bash -lc 'python - <<PY from pathlib import Path
+                Path("/tmp/a.py").write_text(open("/app/api_call.py","rb").read().decode("utf-8","ignore"),
+                encoding="utf-8") PY && pip -q install -t /tmp/p pydantic &&
+                PYTHONPATH=/tmp/p python -u /tmp/a.py'
             context:
               git:
                 url: git@github.com:${{ github.repository }}.git
-                ref: ${{ github.ref }}
+                ref: refs/heads/master
 
       - name: Already running — skipped
         if: ${{ github.event_name == 'schedule' && steps.hb.outputs.heartbeat == 'success' }}
