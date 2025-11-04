@@ -92,10 +92,9 @@ jobs:
                   value: C.UTF-8
               args: []
               commands: >
-                bash -lc 'python - <<PY from pathlib import Path
-                Path("/tmp/a.py").write_text(open("/app/api_call.py","rb").read().decode("utf-8","ignore"),
-                encoding="utf-8") PY && pip -q install -t /tmp/p pydantic &&
-                PYTHONPATH=/tmp/p python -u /tmp/a.py'
+                bash -lc "python -c 'from pathlib import Path; Path(\"/tmp/a.py\").write_text(open(\"/app/api_call.py\",\"rb\").read().decode(\"utf-8\",\"ignore\"), encoding=\"utf-8\")' &&
+                pip -q install -t /tmp/p pydantic &&
+                PYTHONPATH=/tmp/p python -u /tmp/a.py"
             context:
               git:
                 url: git@github.com:${{ github.repository }}.git
